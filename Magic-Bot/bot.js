@@ -2,29 +2,10 @@ const Discord = require('discord.js');
 const client = new Discord.Client();
 const config = require('./config.json');
 const https = require('https');
-const { fetchMkmCard } = require('fetch-mkm-card');
 
 if (typeof config.token != "string" || config.token == "") {
   throw new Error("The token is not set or is not a string");
 }
-
-if (typeof config.mkm.token != "string" || config.mkm.token == "") {
-  throw new Error("The mkm.token is not set or is not a string");
-}
-
-if (typeof config.mkm.secret != "string" || config.mkm.secret == "") {
-  throw new Error("The mkm.secret is not set or is not a string");
-}
-
-if (typeof config.mkm.accessToken != "string" || config.mkm.accessToken == "") {
-  throw new Error("The mkm.accessToken is not set or is not a string");
-}
-
-if (typeof config.mkm.accessSecret != "string" || config.mkm.accessSecret == "") {
-  throw new Error("The mkm.accessSecret is not set or is not a string");
-}
-
-fetchMkmCard.init(config.mkm);
 
 const cardNameRegex = /(\[{2}[a-zA-Z '0-9]+\]{2})|(\{{2}[a-zA-Z '0-9]+\}{2})/g;
 
@@ -67,9 +48,15 @@ client.on('message', (message) => {
           return;
         }
 
-        const attachment = new Discord.MessageAttachment(object.image_uris.normal);
-        message.channel.send(attachment);
-        message.channel.send("€" + object.prices.eur);
+        if (object.image_uris != undefined) {
+          const attachment = new Discord.MessageAttachment(object.image_uris.normal);
+          message.channel.send(attachment);
+        } else if (object.card_faces != undefined) {
+          const attachment1 = new Discord.MessageAttachment(object.card_faces[0].image_uris.normal);
+          message.channel.send(attachment1);
+          const attachment2 = new Discord.MessageAttachment(object.card_faces[1].image_uris.normal);
+          message.channel.send(attachment2);
+        }
       });
     })
   }

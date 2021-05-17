@@ -1,9 +1,3 @@
 {
-  "token": "",
-  "mkm": {
-    "token": "",
-    "secret": "",
-    "accessToken": "",
-    "accessSecret": ""
-  }
+  "token": ""
 }
