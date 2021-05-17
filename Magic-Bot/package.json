@@ -25,6 +25,7 @@
   "author": "Erdioner",
   "license": "MIT",
   "dependencies": {
-    "discord.js": "^12.5.3"
+    "discord.js": "^12.5.3",
+    "fetch-mkm-card": "^1.1.0"
   }
 }
