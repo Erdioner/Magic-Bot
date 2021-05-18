@@ -2,6 +2,7 @@ const Discord = require('discord.js');
 const client = new Discord.Client();
 const config = require('./config.json');
 const https = require('https');
+const Canvas = require('canvas');
 
 if (typeof config.token != "string" || config.token == "") {
   throw new Error("The token is not set or is not a string");
@@ -17,8 +18,10 @@ client.on('message', (message) => {
   if (message.author.id === client.user.id) return;
 
   var matches = message.content.match(cardNameRegex);
-  if (matches == null) return;
+  if (matches != null) captureAndSendCards(message, matches);
+});
 
+async function captureAndSendCards(message, matches) {
   var cards = [];
   for (i = 0; i < matches.length; i++) {
     let matchLength = matches[i].length;
@@ -48,18 +51,52 @@ client.on('message', (message) => {
           return;
         }
 
-        if (object.image_uris != undefined) {
-          const attachment = new Discord.MessageAttachment(object.image_uris.normal);
-          message.channel.send(attachment);
-        } else if (object.card_faces != undefined) {
-          const attachment1 = new Discord.MessageAttachment(object.card_faces[0].image_uris.normal);
-          message.channel.send(attachment1);
-          const attachment2 = new Discord.MessageAttachment(object.card_faces[1].image_uris.normal);
-          message.channel.send(attachment2);
-        }
+        sendCardEmbed(object, message.channel);
       });
     })
   }
-});
+}
+
+async function sendCardEmbed(card, channel) {
+  let canvas = undefined;
+  if (card.card_faces != undefined) {
+    canvas = Canvas.createCanvas(976, 680);
+    const context = canvas.getContext('2d');
+
+    const front = await Canvas.loadImage(card.card_faces[0].image_uris.normal);
+    const back = await Canvas.loadImage(card.card_faces[1].image_uris.normal);
+
+    context.drawImage(front, 0, 0, 488, 680);
+    context.drawImage(back, 488, 0, 488, 680);
+  } else {
+    canvas = Canvas.createCanvas(488, 680);
+    const context = canvas.getContext('2d');
+
+    const front = await Canvas.loadImage(card.image_uris.normal);
+
+    context.drawImage(front, 0, 0, 488, 680);
+  }
+
+  const attachment = new Discord.MessageAttachment(canvas.toBuffer(), 'bufferedfilename.png');
+
+  let embed = new Discord.MessageEmbed()
+    .setColor('#0099ff')
+    .setTitle(card.name)
+    .setURL(card.purchase_uris.cardmarket)
+    .attachFiles(attachment)
+    .setImage('attachment://bufferedfilename.png')
+    .addFields(
+      { name: 'Standard', value: legalityRewrite(card.legalities.standard), inline:true },
+      { name: 'Modern', value: legalityRewrite(card.legalities.modern), inline:true },
+      { name: 'Commander', value: legalityRewrite(card.legalities.commander), inline:true }
+    );
+
+
+  channel.send(embed);
+}
+
+function legalityRewrite(legality) {
+  return legality == 'legal' ? 'Legal' : 'Illegal'
+}
 
 client.login(config.token);
