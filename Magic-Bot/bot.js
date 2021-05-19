@@ -22,7 +22,102 @@ client.on('message', (message) => {
     const cards = processMentionedCards(cardsMentioned);
     captureAndSendCards(message, cards);
   }
+
+  if (message.content.startsWith('!')) {
+    processCommand(message);
+  }
+
 });
+
+function processCommand(message) {
+  let command = message.content.split(' ')[0].substring(1);
+  let args = message.content.split(' ').slice(1);
+
+  if (command == 'q' || command == 'search') {
+    searchCommand(message, args);
+  } else if (command == 'r' || command == 'random') {
+    randomCard(message);
+  } else if (command == 't' || command == 'tuktuk') {
+    captureAndSendCards(message, [{searchtype:'fuzzy', name:'tuktuk the returned'}]);
+  }
+}
+
+function randomCard(message) {
+  https.get(`https://api.scryfall.com/cards/random`, (res) =>{
+    let body = "";
+
+    res.on('data', (data) => {
+      body += data;
+    });
+
+    res.on('end', () => {
+      let object = JSON.parse(body);
+
+      if (object.object == 'error') {
+        if (object.code == 'not_found') {
+          message.channel.send(object.details);
+        }
+        console.log(object);
+        return;
+      }
+
+      sendCardEmbed(object, message.channel);
+    });
+  });
+}
+
+function searchCommand(message, args) {
+  let argument = args.join(' ');
+
+  https.get(`https://api.scryfall.com/cards/search?q=${argument}`, (res) =>{
+    let body = "";
+
+    res.on('data', (data) => {
+      body += data;
+    });
+
+    res.on('end', () => {
+      let object = JSON.parse(body);
+
+      if (object.object == 'error') {
+        if (object.code == 'not_found') {
+          message.channel.send(object.details);
+        }
+        console.log(object);
+        return;
+      }
+
+      let cards = [];
+
+      let length = object.total_cards >= 25 ? 25 : object.total_cards;
+
+      for (i = 0; i < length; i++) {
+        cards.push({
+          name: object.data[i].name,
+          cost: object.data[i].mana_cost != undefined ? object.data[i].mana_cost.replace('{', '').replace('}', '') : ''
+        })
+      }
+
+      sendSearchEmbed(cards, `https://scryfall.com/search?q=${argument}`, message);
+    });
+  });
+}
+
+async function sendSearchEmbed(cards, link, message) {
+  let text = '';
+  for (i = 0; i < cards.length; i++) {
+    text += `${cards[i].name} (${cards[i].cost})\n`;
+  }
+
+  let embed = new Discord.MessageEmbed()
+    .setColor('#0099ff')
+    .setTitle('Search')
+    .setURL(link)
+    .setDescription(text);
+
+
+  message.channel.send(embed);
+}
 
 function processMentionedCards(cardsMentioned) {
   var cards = [];
@@ -59,7 +154,7 @@ async function captureAndSendCards(message, cards) {
 
         sendCardEmbed(object, message.channel);
       });
-    })
+    });
   }
 }
 
@@ -91,11 +186,11 @@ async function sendCardEmbed(card, channel) {
     .setURL(card.purchase_uris.cardmarket)
     .attachFiles(attachment)
     .setImage('attachment://bufferedfilename.png')
-    .addFields(
+    .addFields([
       { name: 'Standard', value: legalityRewrite(card.legalities.standard), inline:true },
       { name: 'Modern', value: legalityRewrite(card.legalities.modern), inline:true },
       { name: 'Commander', value: legalityRewrite(card.legalities.commander), inline:true }
-    );
+    ]);
 
 
   channel.send(embed);
