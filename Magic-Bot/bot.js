@@ -4,11 +4,11 @@ const config = require('./config.json');
 const https = require('https');
 const Canvas = require('canvas');
 
+const cardNameRegex = /(\[{2}[a-zA-Z, '0-9]+\]{2})|(\{{2}[a-zA-Z, '0-9]+\}{2})/g;
+
 if (typeof config.token != "string" || config.token == "") {
   throw new Error("The token is not set or is not a string");
 }
-
-const cardNameRegex = /(\[{2}[a-zA-Z '0-9]+\]{2})|(\{{2}[a-zA-Z '0-9]+\}{2})/g;
 
 client.on('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -17,23 +17,29 @@ client.on('ready', () => {
 client.on('message', (message) => {
   if (message.author.id === client.user.id) return;
 
-  var matches = message.content.match(cardNameRegex);
-  if (matches != null) captureAndSendCards(message, matches);
+  var cardsMentioned = message.content.match(cardNameRegex);
+  if (cardsMentioned != null) {
+    const cards = processMentionedCards(cardsMentioned);
+    captureAndSendCards(message, cards);
+  }
 });
 
-async function captureAndSendCards(message, matches) {
+function processMentionedCards(cardsMentioned) {
   var cards = [];
-  for (i = 0; i < matches.length; i++) {
-    let matchLength = matches[i].length;
+  for (i = 0; i < cardsMentioned.length; i++) {
+    let nameLength = cardsMentioned[i].length;
     cards.push({
-      name: matches[i].substring(2, matchLength-2),
-      type: matches[i].startsWith('[') ? 'exact' : 'fuzzy'
+      name: cardsMentioned[i].substring(2, nameLength-2),
+      searchtype: cardsMentioned[i].startsWith('[') ? 'exact' : 'fuzzy'
     });
   }
+  return cards;
+}
 
+async function captureAndSendCards(message, cards) {
   for (i = 0; i < cards.length; i++) {
     let card = {...cards[i]};
-    https.get(`https://api.scryfall.com/cards/named?${cards[i].type}=${cards[i].name}`, (res) =>{
+    https.get(`https://api.scryfall.com/cards/named?${cards[i].searchtype}=${cards[i].name}`, (res) =>{
       let body = "";
 
       res.on('data', (data) => {
