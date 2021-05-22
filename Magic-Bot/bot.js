@@ -3,7 +3,9 @@ const client = new Discord.Client();
 const config = require('./config.json');
 const https = require('https');
 const Canvas = require('canvas');
+const fs = require('fs');
 
+const commandExtraRegex = /((.)*\([A-Za-z 0-9]+\))/g;
 const cardNameRegex = /(\[{2}[a-zA-Z, '0-9]+\]{2})|(\{{2}[a-zA-Z, '0-9]+\}{2})/g;
 
 if (typeof config.token != "string" || config.token == "") {
@@ -33,17 +35,34 @@ function processCommand(message) {
   let command = message.content.split(' ')[0].substring(1);
   let args = message.content.split(' ').slice(1);
 
-  if (command == 'q' || command == 'search') {
-    searchCommand(message, args);
-  } else if (command == 'r' || command == 'random') {
-    randomCard(message);
-  } else if (command == 't' || command == 'tuktuk') {
+  if (config.debugMode) console.log(command, args);
+
+  if (command.startsWith('debug')) {
+    if (message.member.roles.cache.some(role => role.name === 'Admin')) {
+      config.debugMode = !config.debugMode;
+      fs.writeFile('./config.json', JSON.stringify(config), (err) => {
+        if (err) return console.log(err);
+      });
+      message.channel.send(`Debug mode ${config.debugMode ? 'Enabled' : 'Disabled'}`);
+    }
+  } else if (command.startsWith('quit')) {
+     if (message.member.roles.cache.some(role => role.name === 'Admin')) {
+       if (config.debugMode) console.log('Stopping bot');
+       process.exit();
+     }
+  } else if (command.startsWith('q') || command.startsWith('search')) {
+    searchCommand(command, message, args);
+  } else if (command.startsWith('r') || command.startsWith('random')) {
+    randomCard(message, args);
+  } else if (command.startsWith('t') || command .startsWith('tuktuk')) {
     captureAndSendCards(message, [{searchtype:'fuzzy', name:'tuktuk the returned'}]);
   }
 }
 
-function randomCard(message) {
-  https.get(`https://api.scryfall.com/cards/random`, (res) =>{
+function randomCard(message, args) {
+  const argument = args.join(' ');
+
+  https.get(`https://api.scryfall.com/cards/random${argument != '' ? '?q='+argument : ''}`, (res) =>{
     let body = "";
 
     res.on('data', (data) => {
@@ -57,7 +76,7 @@ function randomCard(message) {
         if (object.code == 'not_found') {
           message.channel.send(object.details);
         }
-        console.log(object);
+        if (config.debugMode) console.log(object);
         return;
       }
 
@@ -66,10 +85,15 @@ function randomCard(message) {
   });
 }
 
-function searchCommand(message, args) {
+function searchCommand(command, message, args) {
+  let commandExtra = command.match(commandExtraRegex);
+  if (commandExtra != null) {
+    commandExtra = commandExtra[0].substring(commandExtra[0].indexOf('(')+1, commandExtra[0].length-1);
+  }
+
   let argument = args.join(' ');
 
-  https.get(`https://api.scryfall.com/cards/search?q=${argument}`, (res) =>{
+  https.get(`https://api.scryfall.com/cards/search?q=${argument + (commandExtra != null ? '&order=' + commandExtra : '')}`, (res) =>{
     let body = "";
 
     res.on('data', (data) => {
@@ -83,7 +107,7 @@ function searchCommand(message, args) {
         if (object.code == 'not_found') {
           message.channel.send(object.details);
         }
-        console.log(object);
+        if (config.debugMode) console.log(object);
         return;
       }
 
@@ -94,11 +118,10 @@ function searchCommand(message, args) {
       for (i = 0; i < length; i++) {
         cards.push({
           name: object.data[i].name,
-          cost: object.data[i].mana_cost != undefined ? object.data[i].mana_cost.replace('{', '').replace('}', '') : ''
+          cost: object.data[i].mana_cost != undefined ? object.data[i].mana_cost.replace(/(\{)/g, '').replace(/(\})/g, '') : ''
         })
       }
-
-      sendSearchEmbed(cards, `https://scryfall.com/search?q=${argument}`, message);
+      sendSearchEmbed(cards, `https://scryfall.com/search?q=${argument + (commandExtra != null ? '&order=' + commandExtra : '')}`, message);
     });
   });
 }
@@ -108,6 +131,9 @@ async function sendSearchEmbed(cards, link, message) {
   for (i = 0; i < cards.length; i++) {
     text += `${cards[i].name} (${cards[i].cost})\n`;
   }
+
+  link = link.replace(/( )/g, '%20');
+  if (config.debugMode) console.log(link);
 
   let embed = new Discord.MessageEmbed()
     .setColor('#0099ff')
@@ -148,7 +174,7 @@ async function captureAndSendCards(message, cards) {
           if (object.code == 'not_found') {
             message.channel.send(object.details);
           }
-          console.log(object);
+          if (config.debugMode) console.log(object);
           return;
         }
 
