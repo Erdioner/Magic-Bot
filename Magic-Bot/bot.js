@@ -1,15 +1,25 @@
 const Discord = require('discord.js');
 const client = new Discord.Client();
-const config = require('./config.json');
 const https = require('https');
 const Canvas = require('canvas');
 const fs = require('fs');
+
+if (!fs.existsSync('./config.json')) {
+  let jsonString = JSON.stringify({
+    token: "",
+    debugMode: false
+  });
+  fs.writeFileSync('./config.json', jsonString, (err) => {
+    if (err) return console.log(err);
+  });
+}
+const config = require('./config.json');
 
 const commandExtraRegex = /((.)*\([A-Za-z 0-9]+\))/g;
 const cardNameRegex = /(\[{2}[a-zA-Z, '0-9]+\]{2})|(\{{2}[a-zA-Z, '0-9]+\}{2})/g;
 
 if (typeof config.token != "string" || config.token == "") {
-  throw new Error("The token is not set or is not a string");
+  throw new Error("The token is not set or is not a string, set it in config.json");
 }
 
 client.on('ready', () => {
@@ -54,8 +64,13 @@ function processCommand(message) {
     searchCommand(command, message, args);
   } else if (command.startsWith('r') || command.startsWith('random')) {
     randomCard(message, args);
-  } else if (command.startsWith('t') || command .startsWith('tuktuk')) {
+  } else if (command.startsWith('t') || command.startsWith('tuktuk')) {
     captureAndSendCards(message, [{searchtype:'fuzzy', name:'tuktuk the returned'}]);
+  } else if (command.startsWith('d') || command.startsWith('delete')) {
+    message.channel.messages.fetch(args[0]).then((msg) => {
+      if (msg.embeds[0].footer.text == ''+message.author.id) msg.delete();
+    });
+    message.delete();
   }
 }
 
@@ -178,13 +193,13 @@ async function captureAndSendCards(message, cards) {
           return;
         }
 
-        sendCardEmbed(object, message.channel);
+        sendCardEmbed(object, message.channel, message.author);
       });
     });
   }
 }
 
-async function sendCardEmbed(card, channel) {
+async function sendCardEmbed(card, channel, sender) {
   let canvas = undefined;
   if (card.card_faces != undefined) {
     canvas = Canvas.createCanvas(976, 680);
@@ -216,10 +231,13 @@ async function sendCardEmbed(card, channel) {
       { name: 'Standard', value: legalityRewrite(card.legalities.standard), inline:true },
       { name: 'Modern', value: legalityRewrite(card.legalities.modern), inline:true },
       { name: 'Commander', value: legalityRewrite(card.legalities.commander), inline:true }
-    ]);
+    ])
+    .setFooter(sender.id);
 
 
-  channel.send(embed);
+  channel.send(embed).then((message) => {
+    message.edit(embed.setDescription('Id: '+message.id));
+  });
 }
 
 function legalityRewrite(legality) {
