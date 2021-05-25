@@ -106,6 +106,16 @@ function searchCommand(command, message, args) {
     commandExtra = commandExtra[0].substring(commandExtra[0].indexOf('(')+1, commandExtra[0].length-1);
   }
 
+  let pages = 1;
+
+  for (i = 0; i < args.length; i++) {
+    if (args[i].startsWith('page') || args[i].startsWith('pages')) {
+      pages = args[i].split(':')[1] > 3 ? 3 : args[i].split(':')[1];
+      args.splice(i);
+      break;
+    }
+  }
+
   let argument = args.join(' ');
 
   https.get(`https://api.scryfall.com/cards/search?q=${argument + (commandExtra != null ? '&order=' + commandExtra : '')}`, (res) =>{
@@ -118,6 +128,8 @@ function searchCommand(command, message, args) {
     res.on('end', () => {
       let object = JSON.parse(body);
 
+      if (config.debugMode) console.log(object.object);
+
       if (object.object == 'error') {
         if (object.code == 'not_found') {
           message.channel.send(object.details);
@@ -128,33 +140,54 @@ function searchCommand(command, message, args) {
 
       let cards = [];
 
-      let length = object.total_cards >= 25 ? 25 : object.total_cards;
+      let length = object.total_cards >= (25 * pages) ? (25 * pages) : object.total_cards;
 
       for (i = 0; i < length; i++) {
+        if (object.data[i] == undefined) {
+          message.channel.send('Arguments was used that could not be understood');
+          return;
+        }
+
         cards.push({
           name: object.data[i].name,
           cost: object.data[i].mana_cost != undefined ? object.data[i].mana_cost.replace(/(\{)/g, '').replace(/(\})/g, '') : ''
         })
       }
-      sendSearchEmbed(cards, `https://scryfall.com/search?q=${argument + (commandExtra != null ? '&order=' + commandExtra : '')}`, message);
+      sendSearchEmbed(
+        cards,
+        `https://scryfall.com/search?q=${argument + (commandExtra != null ? '&order=' + commandExtra : '')}`,
+        message,
+        pages,
+        object.total_cards);
     });
   });
 }
 
-async function sendSearchEmbed(cards, link, message) {
-  let text = '';
+async function sendSearchEmbed(cards, link, message, pages, totalCards) {
+  let text = [];
+  for (i = 0; i < pages; i++) {
+    text.push('');
+  }
+
   for (i = 0; i < cards.length; i++) {
-    text += `${cards[i].name} (${cards[i].cost})\n`;
+    text[Math.floor(i/25)] += `${cards[i].name} (${cards[i].cost})\n`;
   }
 
   link = link.replace(/( )/g, '%20');
   if (config.debugMode) console.log(link);
 
+  let fields = [];
+
+  for (i = 0; i < pages; i++) {
+    fields.push({ name: `Page ${i+1}`, value: text[i], inline: true })
+  }
+
   let embed = new Discord.MessageEmbed()
     .setColor('#0099ff')
     .setTitle('Search')
     .setURL(link)
-    .setDescription(text);
+    .setDescription(`Cards found: ${totalCards}`)
+    .addFields(fields);
 
 
   message.channel.send(embed);
