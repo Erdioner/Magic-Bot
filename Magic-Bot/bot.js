@@ -111,7 +111,7 @@ function searchCommand(command, message, args) {
   for (i = 0; i < args.length; i++) {
     if (args[i].startsWith('page') || args[i].startsWith('pages')) {
       pages = args[i].split(':')[1] > 3 ? 3 : args[i].split(':')[1];
-      args.splice(i);
+      args.splice(i, 1);
       break;
     }
   }
